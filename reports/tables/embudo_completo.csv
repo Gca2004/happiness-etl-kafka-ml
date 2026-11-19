@@ -1,0 +1,14 @@
+etapa,filas,columnas,paises_unicos,nota
+1. Mensajes disponibles en el tópico,782,,,consulta en vivo a Kafka
+2. Mensajes consumidos y almacenados,782,35.0,170.0,raw_records.csv (incluye 5 columnas de metadatos)
+1. Mensajes disponibles en el tópico,782,,,consulta en vivo a Kafka
+2. Mensajes consumidos y almacenados,782,35.0,170.0,raw_records.csv (incluye 5 columnas de metadatos)
+3. Sin duplicados por record_id,782,35.0,170.0,duplicados detectados: 0
+4. Esquema unificado (formato largo),782,11.0,170.0,10 columnas comunes + year; 7 columnas originales descartadas
+5. Nombres de país unificados,782,11.0,164.0,12 filas renombradas
+6. Unicidad país-año verificada,782,11.0,164.0,0 duplicados eliminados
+7. Objetivo (score) válido,782,11.0,164.0,0 filas sin score
+8. Dataset limpio (entrada de modelado),782,11.0,164.0,"781 filas completas, 1 con nulo pendiente de imputación"
+9. Conjunto de entrenamiento (por país),626,9.0,131.0,"GroupShuffleSplit, semilla 42"
+10. Conjunto de prueba (por país),156,9.0,33.0,países no vistos en entrenamiento
+11. Predicciones evaluadas en prueba,156,,33.0,modelo: Ridge

@@ -1,0 +1,90 @@
+# Taller 3: Pipeline ETL con Apache Kafka y Machine Learning
+
+## Objetivo
+Integrar los registros del World Happiness Report 2015–2019, explorar su calidad y entrenar un modelo de regresión para estimar el Happiness Score. El proyecto incluye scripts para consumir registros de Kafka, transformarlos y guardar predicciones en SQLite.
+
+## Flujo del proyecto
+
+1. **Extracción:** el consumidor de Kafka lee los mensajes y acumula sus metadatos y datos en memoria. El archivo `data/raw_records.csv` es la entrada para el análisis.
+2. **Transformación y análisis:** `notebooks/01_eda.ipynb` integra los esquemas anuales, limpia nombres de países, recupera regiones y produce `data/clean_records.csv`.
+3. **Modelado:** `notebooks/02_modelado.ipynb` divide los países en entrenamiento y prueba, compara modelos y guarda un pipeline de preprocesamiento y regresión en `models/model.joblib`.
+4. **Predicción y carga:** `src/stream_predict.py` transforma cada registro, usa el pipeline guardado y almacena las predicciones en SQLite. Acepta el CSV local o una lectura finita desde Kafka.
+5. **Verificación:** `src/verificar_bd.py` muestra resultados por origen y año, duplicados y muestras de predicciones.
+
+## Datos y decisiones de preparación
+
+El CSV suministrado contiene 782 registros de 2015 a 2019. Los cinco años usan nombres de columnas diferentes, por lo que se construyó un mapa de equivalencias y se integraron en formato largo, con una fila por país y año. Tras unificar variantes de nombres se identificaron 164 países.
+
+La región solo está presente en 2015–2016; para los años posteriores se recupera mediante el país y se asigna manualmente la región de Gambia. Esto supone que las regiones permanecen constantes. La equivalencia entre `Family` y `Social support` se usa como supuesto y requiere contrastarse con la documentación de origen.
+
+Se detectó un valor faltante en `corruption`. El EDA no lo reemplaza: el pipeline calcula la mediana usando únicamente datos de entrenamiento. Se mantienen los ceros y valores atípicos detectados, porque no se ha confirmado que sean errores. Se excluye `rank` de las predictoras, ya que depende del puntaje y podría introducir fuga de información.
+
+## Resultados del análisis y modelo
+
+En la ejecución con el CSV suministrado, `gdp` y `life_expectancy` presentaron las correlaciones más altas con `score` entre las variables predictoras: aproximadamente 0,789 y 0,742 respectivamente. Estas asociaciones no demuestran causalidad. Las medianas regionales observadas variaron; Australia y Nueva Zelanda, Norteamérica y Europa occidental tuvieron las mayores, mientras que África subsahariana y Asia meridional estuvieron entre las menores. Las regiones tienen tamaños distintos, por lo que la comparación debe interpretarse con cautela.
+
+Para reducir la mezcla de observaciones del mismo país entre entrenamiento y prueba, se usó una partición por país: 626 registros de 131 países para entrenamiento y 156 registros de 33 países para prueba. Se compararon modelos mediante validación cruzada por país dentro de entrenamiento; Ridge obtuvo el menor RMSE medio de esa comparación.
+
+| Métrica | Resultado de Ridge en prueba |
+|---|---:|
+| MAE | 0,3603 |
+| MSE | 0,2593 |
+| RMSE | 0,5093 |
+| R² | 0,8315 |
+
+El RMSE medio de validación cruzada fue 0,5320. Estos resultados corresponden a una ejecución concreta y a una sola partición por país; una nueva ejecución o versiones distintas de las dependencias podrían dar resultados diferentes. Las variables predictoras están asociadas a componentes explicativos del propio índice, por lo que esta evaluación no equivale a predecir felicidad con datos externos completamente independientes.
+
+## Estructura principal
+
+- `src/config.py`: parámetros de conexión obtenidos de variables de entorno.
+- `src/extract.py`: consumo y construcción del estado en memoria.
+- `src/transform.py`: adaptación de los mensajes al contrato del modelo.
+- `src/stream_predict.py`: lectura y carga de predicciones en SQLite.
+- `src/verificar_bd.py`: resumen de la base de datos.
+- `notebooks/01_eda.ipynb`: integración, limpieza y exploración.
+- `notebooks/02_modelado.ipynb`: selección y evaluación del modelo.
+- `data/`: datos locales y base SQLite.
+- `models/`: modelo y métricas generados durante la ejecución.
+- `reports/`: figuras y tablas generadas por los notebooks.
+
+## Ejecución
+
+Desde la raíz del proyecto en Windows CMD, activar el entorno existente:
+
+```bat
+.venv\Scripts\activate
+```
+
+Las librerías necesarias incluyen pandas, numpy, matplotlib, seaborn, scikit-learn, joblib, Jupyter, confluent-kafka, python-dotenv y certifi. Configurar el archivo `.env` local con las credenciales proporcionadas por el instructor y conservarlo fuera del repositorio.
+
+Con `data/raw_records.csv` en su lugar, abrir Jupyter desde la carpeta `notebooks` y ejecutar `01_eda.ipynb` y luego `02_modelado.ipynb`:
+
+```bat
+cd notebooks
+jupyter notebook
+```
+
+Al finalizar, regresar a la raíz del proyecto y ejecutar la prueba local:
+
+```bat
+cd ..
+python -m src.stream_predict --csv data/raw_records.csv
+python -m src.verificar_bd
+```
+
+Para leer desde Kafka y guardar en una base independiente:
+
+```bat
+python -m src.stream_predict --kafka --db data/predicciones_kafka.sqlite
+python -m src.verificar_bd --db data/predicciones_kafka.sqlite
+```
+
+El lector de Kafka captura límites de offsets al inicio y realiza una lectura finita de los mensajes disponibles; no funciona como consumidor permanente ni hace commit de offsets. Identifica los mensajes por origen, partición y offset para evitar inserciones duplicadas en una misma base.
+
+## Validación y limitaciones
+
+La prueba local con el CSV suministrado produjo 782 predicciones sin errores; se compararon las variables transformadas con las del EDA y coincidieron. Posteriormente se ejecutó el lector con Kafka en el computador del estudiante: las particiones 0, 1 y 2 aportaron respectivamente 228, 269 y 285 mensajes disponibles (782 en total). Se guardaron 782 predicciones, sin errores ni identificadores duplicados. Por año se obtuvieron 158 registros de 2015, 157 de 2016, 155 de 2017, 156 de 2018 y 156 de 2019. Estas cifras corresponden a la lectura observada; si cambia el tópico pueden variar.
+
+La predicción por país no evalúa el desempeño en años futuros. También hay pocos países, observaciones repetidas y diferencias de escala o construcción entre años que requieren análisis adicional. Como siguientes mejoras se puede probar una partición temporal, repetir la partición por país con distintas semillas y contrastar las definiciones de variables con la fuente original.
+
+**Precaución:** el resumen previo indica que volver a ejecutar `src.extract` con el mismo grupo podría producir un archivo vacío si los offsets ya fueron confirmados. La contraseña debe permanecer fuera de Git y, si fue expuesta, debe solicitarse su renovación.

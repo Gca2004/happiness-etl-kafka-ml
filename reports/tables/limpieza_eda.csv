@@ -1,0 +1,10 @@
+accion,filas_afectadas,decision
+Espacios sobrantes en nombres de país,0,strip aplicado
+Nombres de país unificados,12,6 nombres alternativos mapeados al nombre usado en la mayoría de años
+Duplicados país-año eliminados,0,se conserva la primera aparición
+Filas sin variable objetivo eliminadas,0,no se pueden usar para entrenar
+Región recuperada por cruce con 2015-2016,466,supone que el país no cambia de región
+Región asignada manualmente,1,países sin región en 2015-2016: ['Gambia']
+Nulos en predictoras detectados (imputación pendiente en el pipeline),1,"imputación por mediana, ajustada solo con train"
+Filas con algún cero exacto en predictoras (conservadas),30,no se confirma si es dato faltante; se documenta como limitación
+Filas con algún atípico IQR en predictoras (conservadas),91,valores plausibles; no se eliminan
